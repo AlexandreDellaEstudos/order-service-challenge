@@ -1,13 +1,14 @@
 <!--
   SYNC IMPACT REPORT
-  Version change: (none) → 1.0.0 (initial ratification)
-  Added principles: I through VIII (all new)
-  Added sections: Stack & Technology Decisions, Development Workflow
-  Removed sections: none (initial version)
+  Version change: 1.0.0 → 1.2.0 (MINOR: log pattern + Records + MapStruct formalized)
+  Added principles: IX. Communication Architecture
+  Modified principles: VI (notification-service removed from direct HTTP calls)
+  Added sections: Order State Machine
+  Modified sections: Stack & Technology Decisions (Kafka, Records added)
   Templates reviewed:
-    - .specify/templates/plan-template.md ✅ no changes required (generic gates reference)
-    - .specify/templates/spec-template.md ✅ no changes required (generic placeholders)
-    - .specify/templates/tasks-template.md ✅ no changes required (generic structure)
+    - .specify/templates/plan-template.md ✅ no changes required
+    - .specify/templates/spec-template.md ✅ no changes required
+    - .specify/templates/tasks-template.md ✅ no changes required
   Deferred items: none
 -->
 
@@ -49,18 +50,41 @@ All mutation endpoints (`POST`, `DELETE`) MUST support the `Idempotency-Key` hea
 
 ### V. Observability
 The service MUST be fully observable from day one:
-- **Logs**: Structured JSON via Logback. Every log entry MUST include a `correlationId` propagated
-  through MDC across all service boundaries (inbound and outbound HTTP).
+
+- **Logs**: Structured JSON via **logstash-logback-encoder**. Every log entry MUST contain the
+  following mandatory fields propagated through MDC:
+
+  ```json
+  {
+    "@timestamp": "2026-06-08T19:00:00.000Z",
+    "level": "INFO",
+    "logger_name": "com.plataforma.order.OrderService",
+    "message": "Order confirmed",
+    "correlationId": "uuid",
+    "traceId":       "otel-trace-id",
+    "spanId":        "otel-span-id",
+    "service":       "order-service"
+  }
+  ```
+
+  - `correlationId` MUST be extracted from the `X-Correlation-ID` request header (or generated if
+    absent) and propagated to all outbound HTTP calls and Kafka message headers.
+  - `traceId` and `spanId` MUST be populated automatically by the OpenTelemetry bridge.
+  - Domain-relevant fields (e.g., `orderId`, `customerId`) SHOULD be included as MDC context when
+    available.
+
 - **Metrics**: Exposed via Micrometer + Prometheus at `/actuator/prometheus`. Business metrics
   (orders created, payments processed, payment rejections) MUST be instrumented.
 - **Tracing**: Distributed tracing via OpenTelemetry, exporting spans to Jaeger (or console in dev).
-  All inbound/outbound HTTP calls MUST produce spans.
+  All inbound/outbound HTTP calls and Kafka produce/consume operations MUST produce spans.
 - Docker Compose MUST include Prometheus + Grafana for local visualization.
 
 ### VI. External Services via WireMock Only
 No stub, mock bean, or fake implementation of external services MUST exist in production code:
-- Customer Service, Catalog Service, Payment Gateway, and Notification Service MUST be consumed as
-  real HTTP endpoints pointing to WireMock in all environments.
+- **Customer Service**, **Catalog Service**, and **Payment Gateway** MUST be consumed as real HTTP
+  endpoints pointing to WireMock.
+- **Notification Service** MUST NOT be called directly by `order-service`. It is a downstream
+  consumer of Kafka events — its WireMock mapping exists solely to document the contract.
 - All simulated responses MUST be defined exclusively as JSON files in `wiremock/mappings/`.
 - In tests, WireMock MUST be initialized via **Testcontainers** loading those same mapping files —
   never duplicated inline.
@@ -73,6 +97,30 @@ All endpoints MUST be protected:
 - OWASP Top 10 controls MUST be applied: input validation, rate limiting, security headers
   (HSTS, X-Content-Type-Options, X-Frame-Options).
 - Error responses MUST follow **RFC 7807 (Problem Details)** — stack traces MUST NOT be exposed.
+
+### IX. Communication Architecture
+The `order-service` adopts a hybrid communication model:
+
+**Inbound (synchronous REST)** — client-facing API only:
+- All endpoints under `/api/v1/orders` and `/api/v1/payments` are synchronous REST.
+- The client receives an immediate response for every operation.
+
+**Outbound to external dependencies (synchronous HTTP via WireMock)**:
+- `customer-service` — validate customer on order creation.
+- `catalog-service` — verify product availability and fetch current price on confirmation.
+- `payment-gateway` — initiate payment charge; receives webhook callback asynchronously.
+
+**Outbound domain events (asynchronous Kafka)**:
+- `order-service` MUST publish events to Kafka for every significant state transition.
+- Consumers (notification, fulfillment, inventory) are NOT implemented — they are downstream.
+- `order-service` MUST NOT know who consumes its events (no direct coupling to consumers).
+
+| Event | Kafka Topic | Trigger |
+|---|---|---|
+| `OrderConfirmed` | `orders.confirmed` | Order successfully confirmed |
+| `PaymentApproved` | `orders.payment-approved` | Payment callback approved |
+| `PaymentRejected` | `orders.payment-rejected` | Payment callback rejected (each attempt) |
+| `OrderCancelled` | `orders.cancelled` | Order cancelled (manual or after 3 rejections) |
 
 ### VIII. Concurrency & Consistency
 The `Order` aggregate MUST be protected against concurrent modifications:
@@ -87,11 +135,57 @@ The `Order` aggregate MUST be protected against concurrent modifications:
 - **Language**: Java 21 (LTS)
 - **Framework**: Spring Boot 3.x — Spring MVC, Spring Data JPA, Spring Security, Spring WebClient
 - **Database**: PostgreSQL with **Flyway** versioned migrations
+- **Messaging**: **Apache Kafka** via Spring Kafka — topics defined in `orders.*` namespace
 - **Resilience**: Resilience4j Circuit Breaker on Payment Gateway calls (handles 503 instability)
 - **API Documentation**: OpenAPI 3.1 via SpringDoc — Swagger UI at `/swagger-ui.html`
 - **API Versioning**: URI path prefix `/api/v1/`
-- **Containerization**: Docker + Docker Compose (app, PostgreSQL, WireMock, Prometheus, Grafana, Jaeger)
+- **DTOs / Transfer objects**: Java **Records** MUST be used for ALL data transfer objects across
+  every layer boundary — HTTP request/response, Kafka event payloads, and inter-layer commands.
+  Classes with getters/setters MUST NOT be used for this purpose.
+- **Layer mapping**: **MapStruct** (`@Mapper(componentModel = "spring")`) MUST be used for all
+  conversions between Records and domain objects. Manual mapping code is prohibited.
+  Mapping direction: `Record (HTTP in) → Domain command → Domain entity → Record (HTTP out)`.
+  Kafka event records MUST also be produced via MapStruct mappers.
+- **Containerization**: Docker + Docker Compose (app, PostgreSQL, Kafka, WireMock, Prometheus, Grafana, Jaeger)
 - **CI/CD**: GitHub Actions — build → unit tests → integration tests → Trivy vulnerability scan
+
+## Order State Machine
+
+```
+                    ┌─────────────────────────────────────┐
+                    │                                     │
+   POST /orders     ▼           POST /confirm             │
+  ─────────────► OPEN ──────────────────────► CONFIRMED   │
+                  │  ▲                          │    │     │
+  DELETE /orders  │  │ (rejected, retry < 3)   │    │     │
+  ─────────────►  │  │                          │    │     │
+                  │  └──────── PAYMENT_PENDING ◄┘    │     │
+                  │                  │                │     │
+                  │            callback               │     │
+                  │           approved                │     │
+                  │                │                  │     │
+                  │                ▼                  │     │
+                  │         PAYMENT_APPROVED          │     │
+                  │         (terminal — success)      │     │
+                  │                                   │     │
+                  └──────────────────────────────►    │     │
+                          CANCELLED ◄─────────────────┘     │
+                         (terminal)  rejected >= 3x         │
+                              ▲                              │
+                              └──────────────────────────────┘
+                                DELETE /orders (before approved)
+```
+
+**Valid transitions:**
+- `OPEN` → `CONFIRMED` (via POST /confirm, requires ≥ 1 item)
+- `OPEN` → `CANCELLED` (via DELETE /orders)
+- `CONFIRMED` → `PAYMENT_PENDING` (via POST /payments)
+- `CONFIRMED` → `CANCELLED` (via DELETE /orders)
+- `PAYMENT_PENDING` → `PAYMENT_APPROVED` (via callback — approved)
+- `PAYMENT_PENDING` → `CONFIRMED` (via callback — rejected, attempts < 3)
+- `PAYMENT_PENDING` → `CANCELLED` (via callback — rejected, attempts = 3)
+
+**Any other transition MUST throw a domain exception.**
 
 ## Development Workflow
 
@@ -110,4 +204,4 @@ This constitution supersedes all other development guidelines for the `order-ser
 - Complexity beyond what a principle mandates MUST be documented as an ADR in `docs/architecture.md`.
 - PRs MUST include a Constitution Check confirming no principle violations, or document justified exceptions.
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-08 | **Last Amended**: 2026-06-08
+**Version**: 1.2.0 | **Ratified**: 2026-06-08 | **Last Amended**: 2026-06-08
