@@ -27,16 +27,18 @@ Implementar o `order-service`, único serviço da plataforma de e-commerce a ser
 - SpringDoc OpenAPI 3.1 — Swagger UI em `/swagger-ui.html`
 - logstash-logback-encoder (logs JSON estruturados)
 - Micrometer + OpenTelemetry (métricas + tracing)
-- Testcontainers (PostgreSQL 16, Kafka, WireMock)
-- Pitest (mutation testing — MSI ≥ 75% no módulo domain)
+- Testcontainers (PostgreSQL 16, Kafka, WireMock como container)
+- Pitest 1.16+ (mutation testing — MSI ≥ 90% no módulo domain)
+- ArchUnit (testes de arquitetura — valida Dependency Rule da Clean Architecture em CI)
+- K6 (testes de carga: perfis `nominal` e `peak`)
 
 **Storage**: PostgreSQL 16 — tabelas `orders`, `order_items`, `payments`, `idempotency_keys`
 
-**Testing**: JUnit 5, Testcontainers, WireMock via Testcontainers, Pitest
+**Testing**: JUnit 5, Testcontainers (PostgreSQL 16 + Kafka reais), WireMock via Testcontainers, Pitest (mutation), K6 (carga)
 
 **Target Platform**: Linux container (Docker), CI via GitHub Actions
 
-**Performance Goals**: p95 < 300ms para operações de leitura; concorrência tratada via optimistic locking
+**Performance Goals**: p50 < 50 ms, p75 < 100 ms, p95 < 300 ms, p99 < 600 ms para leitura; p50 < 100 ms, p75 < 200 ms, p95 < 500 ms, p99 < 900 ms para escrita; concorrência tratada via optimistic locking
 
 **Constraints**: Zero dependência de framework no `domain/`; Records para todos os DTOs; MapStruct para todo mapeamento; zero mock beans no código de produção
 
@@ -50,7 +52,7 @@ Implementar o `order-service`, único serviço da plataforma de e-commerce a ser
 |---|---|---|
 | I. Clean Architecture | PASS | 3 camadas: `domain/`, `application/`, `infrastructure/` com Dependency Rule respeitada |
 | II. DDD | PASS | `Order` como Aggregate Root; VOs para OrderId, CustomerId, ProductId, Money; Domain Events em `domain/event/` |
-| III. TDD NON-NEGOTIABLE | PASS | Unitários no domínio escritos primeiro (Red-Green-Refactor); cobertura de linhas ≥ 80% no módulo domain; Testcontainers para integração; Pitest MSI ≥ 75% |
+| III. TDD NON-NEGOTIABLE | PASS | Unitários no domínio escritos primeiro (Red-Green-Refactor); cobertura de linhas ≥ 90% no módulo domain; Testcontainers (PostgreSQL 16 + Kafka reais) para integração; Pitest MSI ≥ 90%; K6 valida budgets p50/p75/p95/p99 (leitura e escrita), falha CI se estouro ou erro > 1% |
 | IV. Idempotência | PASS | Tabela `idempotency_keys`; header `Idempotency-Key` em todos os endpoints POST/DELETE |
 | V. Observabilidade | PASS | MDC com correlationId + traceId + spanId; Micrometer counters de negócio; OTel traces; Docker Compose com Prometheus + Grafana + Jaeger |
 | VI. WireMock Only | PASS | CustomerWebClient, CatalogWebClient, PaymentGatewayWebClient → WireMock; zero stub/mock bean em produção |

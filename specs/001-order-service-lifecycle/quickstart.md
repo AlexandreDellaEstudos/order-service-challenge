@@ -166,7 +166,7 @@ mvn test -pl .
 # Testes de integração (requer Docker para Testcontainers)
 mvn verify -P integration-tests
 
-# Mutation Testing (Pitest) — MSI alvo: ≥ 75%
+# Mutation Testing (Pitest) — MSI alvo: ≥ 90%
 mvn test-compile org.pitest:pitest-maven:mutationCoverage
 # Relatório em: target/pit-reports/index.html
 ```

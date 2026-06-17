@@ -29,6 +29,9 @@
 - [ ] T005 [P] Criar `docker-compose.yml` na raiz com serviços: order-service (porta 8080), postgres:16 (5432), kafka (9092), wiremock (8081), jaeger (16686), prometheus (9090), grafana (3000)
 - [ ] T006 [P] Criar `.github/workflows/ci.yml` com stages: build → unit-tests → integration-tests → trivy-scan
 - [ ] T007 [P] Criar `wiremock/mappings/` com 10 arquivos JSON: `customers-active.json`, `customers-blocked.json`, `customers-not-found.json`, `products-available.json`, `products-unavailable.json`, `products-not-found.json`, `payments-approved.json`, `payments-rejected.json`, `payments-gateway-error.json`, `notifications.json`
+- [ ] T088 [P] Criar `grafana/provisioning/datasources/prometheus.yml` e `grafana/provisioning/dashboards/dashboard.yml` (provisioning automático do Grafana via Docker Compose)
+- [ ] T089 [P] Criar `grafana/dashboards/order-service.json` com painéis: latência p50/p75/p95/p99 por endpoint, taxa de erros, throughput e status do circuit breaker
+- [ ] T090 [P] Configurar alertas no dashboard `order-service.json`: p75>200ms, p95>500ms, p99>900ms ou taxa de erro>2% por janela de 1 minuto
 
 **Checkpoint**: Repositório inicializado, Docker Compose funcional com `docker-compose up -d`
 
@@ -75,7 +78,18 @@
 - [ ] T026 [P] Criar classe base de testes de integração `BaseIntegrationTest.java` em `test/infrastructure/` com `@Testcontainers` (PostgreSQL 16 + Kafka + WireMock via Testcontainers, apontando para `wiremock/mappings/`)
 - [ ] T027 [P] Criar `IdempotencyService.java` em `infrastructure/` + `IdempotencyJpaRepository.java` em `infrastructure/adapter/persistence/` (verificar e persistir chaves de idempotência)
 
-**Checkpoint**: Fundação pronta — VOs, ports, migrations, segurança e observabilidade configurados. Iniciar user stories.
+### Testes de Arquitetura — ArchUnit
+
+- [ ] T091 [P] Adicionar dependência `archunit-junit5` ao `pom.xml` e criar `ArchitectureTest.java` em `test/java/com/plataforma/order/` com as seguintes regras:
+  - `domain` não importa nada de `infrastructure`, `application`, Spring ou JPA
+  - `application` não importa nada de `infrastructure`; depende apenas de `domain`
+  - `infrastructure` pode depender de `application` e `domain`, mas nunca o inverso
+  - Classes anotadas com `@RestController` residem exclusivamente em `infrastructure.adapter.http`
+  - Interfaces de port residem exclusivamente em `domain.port`
+  - Use cases residem exclusivamente em `application.usecase`
+  - Ausência de ciclos entre pacotes (`slices matching "..order.(*)..".should().beFreeOfCycles()`)
+
+**Checkpoint**: Fundação pronta — VOs, ports, migrations, segurança, observabilidade e testes de arquitetura configurados. Iniciar user stories.
 
 ---
 
@@ -224,11 +238,14 @@
 
 - [ ] T078 [P] Adicionar anotações OpenAPI 3.1 (`@Operation`, `@ApiResponse`, `@Parameter`) em `OrderController.java` e `PaymentController.java` para Swagger UI completo em `/swagger-ui.html`
 - [ ] T079 [P] Configurar headers de segurança OWASP em `SecurityConfig.java`: HSTS, X-Content-Type-Options, X-Frame-Options, Content-Security-Policy
-- [ ] T080 [P] Executar Pitest em `order-service/` e corrigir mutantes sobreviventes até MSI ≥ 75% nos testes do módulo `domain/`
-- [ ] T081 Verificar cobertura de linhas do módulo `domain/` ≥ 80% via JaCoCo (configurar plugin no `pom.xml` com failOnViolation)
+- [ ] T080 [P] Executar Pitest em `order-service/` e corrigir mutantes sobreviventes até MSI ≥ 90% nos testes do módulo `domain/`
+- [ ] T081 Verificar cobertura de linhas do módulo `domain/` ≥ 90% via JaCoCo (configurar plugin no `pom.xml` com failOnViolation)
 - [ ] T082 [P] Criar `docs/architecture.md` com: identificação dos Bounded Contexts, responsabilidades de cada serviço, Mapa de Contextos (Order/Billing/Catalog/Customer), decisões de design (ADRs D-001 a D-010 do research.md), justificativa do optimistic locking
 - [ ] T083 [P] Criar `README.md` na raiz com: pré-requisitos, `docker-compose up -d`, URLs dos serviços, como executar os testes, link para Swagger UI
 - [ ] T084 Executar cenários do `quickstart.md` end-to-end contra o ambiente Docker Compose local e validar todos os 4 cenários (fluxo aprovação, 3 rejeições, idempotência, concorrência)
+- [ ] T085 [P] Criar `k6/scripts/nominal.js` (ramp-up 10→100 rps, 2 min, plateau 5 min; thresholds de leitura: p50<50ms, p75<100ms, p95<300ms, p99<600ms; erro<1%)
+- [ ] T086 [P] Criar `k6/scripts/peak.js` (ramp-up 50→1.000 rps, 3 min, plateau 5 min; thresholds de escrita: p50<100ms, p75<200ms, p95<500ms, p99<900ms; erro<1%)
+- [ ] T087 Adicionar step `k6-load-test` no `.github/workflows/ci.yml` (executa `nominal.js`; falha build se threshold estourar ou taxa de erro > 1%)
 
 ---
 

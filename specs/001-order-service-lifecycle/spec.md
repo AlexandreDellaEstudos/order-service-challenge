@@ -186,6 +186,44 @@ Um cliente ou operador consulta os detalhes de um pedido específico ou lista os
 
 ---
 
+## Non-Functional Requirements
+
+### Performance & Load Testing
+
+- **NFR-001**: O sistema DEVE respeitar os seguintes budgets de latência sob carga nominal:
+
+  | Percentil | Leitura | Escrita |
+  |-----------|---------|---------|
+  | p50       | < 50 ms  | < 100 ms |
+  | p75       | < 100 ms | < 200 ms |
+  | p95       | < 300 ms | < 500 ms |
+  | p99       | < 600 ms | < 900 ms |
+
+- **NFR-002**: Testes de carga DEVEM ser executados com **K6**, cobrindo ao menos dois perfis:
+  - `nominal`: ramp-up de 10 → 100 rps em 2 min, plateau de 5 min.
+  - `peak` (Black Friday): ramp-up de 50 → 1.000 rps em 3 min, plateau de 5 min.
+- **NFR-003**: O pipeline de CI DEVE falhar se qualquer budget de performance for ultrapassado (p50, p75, p95, p99 ou taxa de erro > 1%).
+
+### Observabilidade
+
+- **NFR-004**: O sistema DEVE exportar métricas via Micrometer → Prometheus, com dashboards **Grafana** pré-configurados para: latência p50/p75/p95/p99, taxa de erros, throughput e status do circuit breaker.
+- **NFR-005**: O Docker Compose local DEVE subir Prometheus + **Grafana** + Jaeger como stack de observabilidade, prontos para uso sem configuração manual.
+- **NFR-006**: Alertas **Grafana** DEVEM ser configurados para: p75 > 200 ms, p95 > 500 ms, p99 > 900 ms ou taxa de erro > 2% por janela de 1 minuto.
+
+### Qualidade & Mutation Testing
+
+- **NFR-009**: O módulo `domain/` DEVE atingir MSI (Mutation Score Indicator) ≥ 90% medido pelo **PITest** (versão 1.16+).
+- **NFR-010**: O pipeline de CI DEVE executar **PITest** e falhar se MSI < 90% no módulo `domain/`.
+- **NFR-011**: Cobertura de linhas DEVE ser ≥ 90% no módulo `domain/` (complementar ao mutation score).
+
+### Testes de Integração
+
+- **NFR-012**: Testes de integração DEVEM usar **Testcontainers** para subir instâncias reais de PostgreSQL 16 e Kafka, sem mocks de infraestrutura.
+- **NFR-013**: Chamadas HTTP a serviços externos (Customer, Catalog, Payment Gateway) DEVEM ser simuladas via **WireMock** rodando como container Testcontainers — zero stub beans no código de produção.
+- **NFR-014**: Snapshots WireMock de contratos externos DEVEM ser versionados no repositório (`wiremock/mappings/`) e o pipeline DEVE falhar se um contrato divergir do snapshot (contract drift detection).
+
+---
+
 ## Assumptions
 
 - Clientes e produtos são gerenciados por serviços externos, fora do escopo do `order-service`. Toda validação depende de chamadas HTTP a esses serviços simulados.

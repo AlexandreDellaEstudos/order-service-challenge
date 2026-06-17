@@ -178,7 +178,7 @@ order-service/src/main/java/com/plataforma/order/
 │   ├── model/
 │   │   ├── Order.java               ← Aggregate Root
 │   │   ├── OrderItem.java           ← Entity (dentro do aggregate)
-│   │   ├── Payment.java             ← Entity (raiz separada)
+│   │   ├── Payment.java             ← Entity (identidade própria, não é Aggregate Root)
 │   │   ├── OrderStatus.java         ← OPEN, CONFIRMED, PAYMENT_PENDING, PAYMENT_APPROVED, CANCELLED
 │   │   ├── PaymentStatus.java       ← PENDING, APPROVED, REJECTED
 │   │   ├── Money.java               ← Value Object (BigDecimal + validação)
@@ -565,10 +565,12 @@ A suíte de testes segue o princípio **TDD Red→Green→Refactor** obrigatóri
 
 | Tipo | Ferramenta | Cobertura alvo | O que testa |
 |---|---|---|---|
-| Unitários — domínio | JUnit 5 | ≥ 80% linhas | Order aggregate, state machine, invariantes |
+| Unitários — domínio | JUnit 5 | ≥ 90% linhas | Order aggregate, state machine, invariantes |
 | Unitários — use cases | JUnit 5 | — | Fluxos de aplicação com ports mockados |
+| Arquitetura | ArchUnit | 100% das regras | Dependency Rule Clean Architecture (domain sem Spring/JPA, app sem infra, etc.) |
 | Integração | Testcontainers + WireMock | — | API completa com PostgreSQL real + WireMock |
-| Mutation | Pitest | MSI ≥ 75% | Robustez lógica do módulo domain |
+| Mutation | Pitest | MSI ≥ 90% | Robustez lógica do módulo domain |
+| Carga | K6 | p95 leitura < 300ms; p95 escrita < 500ms | Perfis nominal (100 rps) e peak (1.000 rps) |
 
 **WireMock nos testes**: os mesmos arquivos de `wiremock/mappings/` são carregados via Testcontainers — sem duplicação de mapeamentos.
 
@@ -611,13 +613,20 @@ push / pull_request
         ▼
    ┌─── unit-tests ───────────────────────────────┐
    │  mvn test (JUnit 5 + Pitest + JaCoCo)        │
-   │  Gate: cobertura ≥ 80%, MSI ≥ 75%            │
+   │  Gate: cobertura ≥ 90%, MSI ≥ 90%            │
+   │  ArchUnit: Dependency Rule — falha em violação│
    └──────────────────────────────────────────────┘
         │
         ▼
    ┌─── integration-tests ────────────────────────┐
    │  mvn verify -P integration-tests             │
    │  (Testcontainers + WireMock)                 │
+   └──────────────────────────────────────────────┘
+        │
+        ▼
+   ┌─── k6-load-test ─────────────────────────────┐
+   │  k6 run k6/scripts/nominal.js                │
+   │  Gate: p95 < 300ms leitura; erro < 1%        │
    └──────────────────────────────────────────────┘
         │
         ▼
@@ -648,9 +657,11 @@ push / pull_request
 | Métricas | Micrometer + Prometheus | Padrão de mercado, integra com Grafana (Aula 7) |
 | Tracing | OpenTelemetry + Jaeger | Rastreamento distribuído (Aula 7) |
 | Testes integração | Testcontainers | PostgreSQL + WireMock reais no CI (Aula 4) |
-| Mutation testing | Pitest | MSI ≥ 75% no domínio (Aula 4) |
+| Testes de arquitetura | ArchUnit | Valida Dependency Rule Clean Architecture em CI |
+| Mutation testing | Pitest | MSI ≥ 90% no domínio (Aula 4) |
+| Testes de carga | K6 | Perfis nominal (100 rps) e peak (1.000 rps); gate no CI |
 | Containerização | Docker + Docker Compose | Ambiente reproduzível (Aula 6) |
-| CI/CD | GitHub Actions + Trivy | Build → testes → scan de vulnerabilidades (Aula 6) |
+| CI/CD | GitHub Actions + Trivy | Build → testes → k6 → scan de vulnerabilidades (Aula 6) |
 
 ---
 
@@ -662,11 +673,11 @@ push / pull_request
 
 **Motivação**: Todas as invariantes de negócio (confirmação, cancelamento, limite de tentativas) estão concentradas no `Order`. Isso garante consistência em uma única transação.
 
-### ADR-002: Payment como entidade raiz separada
+### ADR-002: Payment como Entity com identidade própria (não é Aggregate Root)
 
-**Decisão**: `Payment` tem seu próprio repository, não é composto dentro de `Order`.
+**Decisão**: `Payment` tem seu próprio `PaymentRepository` e não é composto dentro de `Order`, mas **não é Aggregate Root** — seu ciclo de vida é acionado exclusivamente pelo `Order`.
 
-**Motivação**: O endpoint `GET /payments/{id}` precisa carregar um Payment diretamente sem passar pelo Order. Um aggregate que não pode ser carregado por sua chave primária viola os princípios DDD.
+**Motivação**: O endpoint `GET /payments/{id}` precisa carregar um Payment diretamente sem passar pelo Order, o que justifica o repositório próprio. Porém, toda transição de estado do Payment (approve, reject) é iniciada pelo Order, portanto não faz sentido elevá-lo a Aggregate Root — isso quebraria a fronteira de consistência do `Order`.
 
 ### ADR-003: Optimistic Locking em vez de Pessimistic
 

@@ -46,9 +46,9 @@ OrderItem
 
 ---
 
-### Entity: Payment (Entidade raiz separada — ligada a Order por orderId)
+### Entity: Payment (Entity com identidade própria, mas não é Aggregate Root — ligada a Order por orderId)
 
-> **Nota DDD**: Payment não está dentro do aggregate Order. É uma entidade com ciclo de vida próprio, identificável por `PaymentId`, persistida e buscada de forma independente. Isso é necessário porque o endpoint `GET /payments/{id}` precisa carregar um Payment diretamente sem passar pelo Order. O vínculo com Order é via `orderId` (referência, não composição).
+> **Nota DDD**: Payment não está dentro do aggregate Order. É uma **Entity com identidade própria e repositório próprio** (`PaymentRepository`), mas **não é Aggregate Root** — o ciclo de vida do Payment é sempre acionado exclusivamente pelo Order. O `PaymentRepository` existe porque o endpoint `GET /payments/{id}` precisa carregar um Payment diretamente sem passar pelo Order. O vínculo com Order é via `orderId` (referência, não composição).
 
 ```
 Payment

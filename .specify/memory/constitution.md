@@ -25,6 +25,14 @@ The `order-service` MUST be structured in three strictly separated layers:
 No dependency MUST flow inward toward Infrastructure from the Domain layer.
 Cross-layer imports are a hard violation and MUST be caught in code review.
 
+**Automated enforcement**: Architecture rules MUST be validated by **ArchUnit** (`archunit-junit5`) tests running on every CI build. The `ArchitectureTest` class MUST assert at minimum:
+- `domain` has zero imports from `infrastructure`, `application`, Spring, or JPA.
+- `application` has zero imports from `infrastructure`.
+- `@RestController` classes reside only in `infrastructure.adapter.http`.
+- Port interfaces reside only in `domain.port`.
+- Use case classes reside only in `application.usecase`.
+- No cyclic dependencies between packages.
+
 ### II. Domain-Driven Design
 The domain model MUST be rich and expressive:
 - Entities and Value Objects MUST encapsulate business rules — raw public setters are prohibited.
@@ -36,8 +44,8 @@ The domain model MUST be rich and expressive:
 ### III. Test-First TDD (NON-NEGOTIABLE)
 Testing discipline MUST follow Red-Green-Refactor strictly:
 - Unit tests MUST be written before implementation for all domain logic.
-- Domain layer MUST achieve a minimum of **80% line coverage**.
-- Mutation Testing with **Pitest** MUST achieve a minimum **MSI of 75%** on the domain module.
+- Domain layer MUST achieve a minimum of **90% line coverage**.
+- Mutation Testing with **Pitest** MUST achieve a minimum **MSI of 90%** on the domain module.
 - Integration tests MUST use **Testcontainers** with a real PostgreSQL instance — no in-memory databases.
 - WireMock integration tests MUST reuse the mappings in `wiremock/mappings/` via Testcontainers.
 
