@@ -1,0 +1,392 @@
+{
+  "info": {
+    "_postman_id": "b1a7c0de-0000-4000-8000-orderservice01",
+    "name": "Order Service API",
+    "description": "Coleção de testes do order-service (sucesso e erro). Funciona no Postman e no Insomnia.\n\nO token JWT já vem embutido na variável `token` (válido por alguns dias). Basta importar e clicar. Se expirar, gere outro com `scripts/testar-api.sh` ou pela documentação do README e atualize a variável `token`.\n\nSuba a stack com `docker compose up` antes (API em http://localhost:8081).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081" },
+    { "key": "token", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJpbnNvbW5pYSIsInNjb3BlIjoib3JkZXJzOndyaXRlIG9yZGVyczpyZWFkIiwiZXhwIjoxNzgyNDI5OTA5fQ.eYSiqoMkuHwnCjBa8LlOeYPI5ycUPHMd2RylDFy6l7I" },
+    { "key": "pedidoId", "value": "" },
+    { "key": "pedidoIdErro", "value": "" },
+    { "key": "pedidoIdAvulso", "value": "" },
+    { "key": "pedidoIdRej", "value": "" },
+    { "key": "clienteErr", "value": "" },
+    { "key": "idemKey", "value": "" },
+    { "key": "clienteIdem", "value": "" },
+    { "key": "idemId1", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1 - Fluxo feliz",
+      "item": [
+        {
+          "name": "Criar pedido",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "try { var j = pm.response.json(); if (j && j.id != null) pm.collectionVariables.set('pedidoId', j.id); } catch (e) {}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"cliente-1\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Adicionar item - Notebook",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"produtoId\": \"notebook\",\n  \"quantidade\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoId}}/itens", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoId}}", "itens"] }
+          }
+        },
+        {
+          "name": "Adicionar item - Mouse",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"produtoId\": \"mouse\",\n  \"quantidade\": 2\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoId}}/itens", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoId}}", "itens"] }
+          }
+        },
+        {
+          "name": "Confirmar pedido",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoId}}/confirmacao", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoId}}", "confirmacao"] }
+          }
+        },
+        {
+          "name": "Iniciar pagamento",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"pedidoId\": {{pedidoId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/payments", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments"] }
+          }
+        },
+        {
+          "name": "Callback - Aprovado",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"resultado\": \"APROVADO\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/payments/{{pedidoId}}/callback", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments", "{{pedidoId}}", "callback"] }
+          }
+        },
+        {
+          "name": "Status do pagamento",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/payments/{{pedidoId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments", "{{pedidoId}}"] }
+          }
+        },
+        {
+          "name": "Buscar pedido",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoId}}"] }
+          }
+        },
+        {
+          "name": "Listar por cliente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos?clienteId=cliente-1", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"], "query": [{ "key": "clienteId", "value": "cliente-1" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 - Cenarios de erro",
+      "item": [
+        {
+          "name": "Sem token (401)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"cliente-1\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Cliente bloqueado (422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"bloqueado\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Cliente inexistente (422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"inexistente\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Criar pedido (base p/ erros)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('clienteErr', 'cli-err-' + Date.now());"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "try { var j = pm.response.json(); if (j && j.id != null) pm.collectionVariables.set('pedidoIdErro', j.id); } catch (e) {}"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"{{clienteErr}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Produto indisponivel (422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"produtoId\": \"indisponivel\",\n  \"quantidade\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdErro}}/itens", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdErro}}", "itens"] }
+          }
+        },
+        {
+          "name": "Produto inexistente (404)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"produtoId\": \"inexistente\",\n  \"quantidade\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdErro}}/itens", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdErro}}", "itens"] }
+          }
+        },
+        {
+          "name": "Pedido inexistente (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/99999999", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "99999999"] }
+          }
+        },
+        {
+          "name": "Cliente ja tem pedido aberto (409)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"{{clienteErr}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Confirmar sem itens (422)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdErro}}/confirmacao", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdErro}}", "confirmacao"] }
+          }
+        },
+        {
+          "name": "Cancelar pedido aprovado (422) - rode a pasta 1 antes",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Operacoes avulsas",
+      "item": [
+        {
+          "name": "Criar pedido (avulso)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "try { var j = pm.response.json(); if (j && j.id != null) pm.collectionVariables.set('pedidoIdAvulso', j.id); } catch (e) {}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"cliente-avulso\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Adicionar item",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"produtoId\": \"mouse\",\n  \"quantidade\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdAvulso}}/itens", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdAvulso}}", "itens"] }
+          }
+        },
+        {
+          "name": "Remover item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdAvulso}}/itens/mouse", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdAvulso}}", "itens", "mouse"] }
+          }
+        },
+        {
+          "name": "Cancelar pedido",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdAvulso}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdAvulso}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 - Pagamento rejeitado (3x) -> cancela",
+      "item": [
+        {
+          "name": "Criar pedido",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "try { var j = pm.response.json(); if (j && j.id != null) pm.collectionVariables.set('pedidoIdRej', j.id); } catch (e) {}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"cliente-rej\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Adicionar item - Mouse",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"produtoId\": \"mouse\",\n  \"quantidade\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdRej}}/itens", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdRej}}", "itens"] }
+          }
+        },
+        {
+          "name": "Confirmar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdRej}}/confirmacao", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdRej}}", "confirmacao"] }
+          }
+        },
+        {
+          "name": "Iniciar pagamento (1)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"pedidoId\": {{pedidoIdRej}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/payments", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments"] }
+          }
+        },
+        {
+          "name": "Callback Rejeitado (1)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"resultado\": \"REJEITADO\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/payments/{{pedidoIdRej}}/callback", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments", "{{pedidoIdRej}}", "callback"] }
+          }
+        },
+        {
+          "name": "Iniciar pagamento (2)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"pedidoId\": {{pedidoIdRej}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/payments", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments"] }
+          }
+        },
+        {
+          "name": "Callback Rejeitado (2)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"resultado\": \"REJEITADO\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/payments/{{pedidoIdRej}}/callback", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments", "{{pedidoIdRej}}", "callback"] }
+          }
+        },
+        {
+          "name": "Iniciar pagamento (3)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"pedidoId\": {{pedidoIdRej}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/payments", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments"] }
+          }
+        },
+        {
+          "name": "Callback Rejeitado (3) -> cancela",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"resultado\": \"REJEITADO\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/payments/{{pedidoIdRej}}/callback", "host": ["{{baseUrl}}"], "path": ["api", "v1", "payments", "{{pedidoIdRej}}", "callback"] }
+          }
+        },
+        {
+          "name": "Buscar pedido (CANCELADO)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos/{{pedidoIdRej}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos", "{{pedidoIdRej}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 - Idempotencia",
+      "item": [
+        {
+          "name": "Criar com Idempotency-Key (1a)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('idemKey', 'idem-' + Date.now());",
+              "pm.collectionVariables.set('clienteIdem', 'cli-idem-' + Date.now());"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "try { var j = pm.response.json(); if (j && j.id != null) pm.collectionVariables.set('idemId1', j.id); } catch (e) {}"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idemKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"{{clienteIdem}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        },
+        {
+          "name": "Criar com mesma chave (2a) -> mesmo id",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idemKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"clienteId\": \"{{clienteIdem}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/pedidos", "host": ["{{baseUrl}}"], "path": ["api", "v1", "pedidos"] }
+          }
+        }
+      ]
+    }
+  ]
+}

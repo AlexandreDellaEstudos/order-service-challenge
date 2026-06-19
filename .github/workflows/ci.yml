@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build e testes (unitários + integração)
+        working-directory: order-service
+        run: mvn -B clean verify
+
+      - name: Mutation testing (Pitest)
+        working-directory: order-service
+        run: mvn -B test-compile org.pitest:pitest-maven:mutationCoverage
+
+      - name: Scan de vulnerabilidades (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: order-service
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+
+  load-test:
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      # Segredo dinâmico: usa o GitHub Secret se existir, senão um fallback de dev.
+      # O mesmo valor é usado pelo container (via compose) e pela geração do token.
+      APP_JWT_SECRET: ${{ secrets.APP_JWT_SECRET || '0f75da60a576f8c7aedc5bb75b19d221abcd68d61df47a078a3b5117722dc2fd' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Subir a stack
+        run: docker compose up -d --build
+
+      - name: Aguardar a aplicação
+        run: |
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:8081/actuator/health; then echo " up"; break; fi
+            sleep 5
+          done
+
+      - name: Gerar token JWT
+        id: token
+        run: |
+          TOKEN=$(python3 - <<'PY'
+          import hmac, hashlib, base64, json, time, os
+          def b64(b): return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+          secret = os.environ["APP_JWT_SECRET"].encode()
+          header = b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+          payload = b64(json.dumps({"sub": "k6", "scope": "orders:write orders:read", "exp": int(time.time()) + 3600}).encode())
+          sig = b64(hmac.new(secret, (header + "." + payload).encode(), hashlib.sha256).digest())
+          print(header + "." + payload + "." + sig)
+          PY
+          )
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Instalar k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Teste de carga (k6 — falha se estourar os budgets)
+        run: k6 run k6/script.js
+        env:
+          BASE_URL: http://localhost:8081
+          TOKEN: ${{ steps.token.outputs.token }}
+
+  # Deploy: builda e publica a imagem no GitHub Container Registry (GHCR).
+  # Só na develop/main e somente se build + load-test passaram.
+  publicar-imagem:
+    runs-on: ubuntu-latest
+    needs: [build, load-test]
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Owner em minúsculas
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build e push da imagem
+        uses: docker/build-push-action@v6
+        with:
+          context: ./order-service
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/order-service:${{ github.ref_name }}
+            ghcr.io/${{ env.OWNER_LC }}/order-service:${{ github.sha }}
+
+  # Só roda em push na develop e SOMENTE se build + load-test + deploy passaram.
+  # Se algum falhar, este job é pulado -> nenhum PR é aberto (bloqueio).
+  abrir-pr-para-main:
+    runs-on: ubuntu-latest
+    needs: [build, load-test, publicar-imagem]
+    if: github.ref == 'refs/heads/develop'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Criar PR develop -> main (idempotente)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existentes=$(gh pr list --base main --head develop --state open --json number --jq 'length')
+          if [ "$existentes" -eq 0 ]; then
+            gh pr create \
+              --base main \
+              --head develop \
+              --title "Merge develop -> main (CI verde)" \
+              --body "PR automático aberto pelo CI após build + testes + carga + publicação da imagem passarem na develop."
+          else
+            echo "Já existe um PR develop -> main aberto. Nada a fazer."
+          fi

@@ -1,0 +1,46 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/orders}
+    username: ${SPRING_DATASOURCE_USERNAME:orders}
+    password: ${SPRING_DATASOURCE_PASSWORD:orders}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+app:
+  kafka:
+    topico-pedidos: ${APP_KAFKA_TOPICO_PEDIDOS:pedidos-eventos}
+  security:
+    jwt:
+      secret: ${APP_JWT_SECRET:0f75da60a576f8c7aedc5bb75b19d221abcd68d61df47a078a3b5117722dc2fd}
+
+services:
+  cliente:
+    url: ${SERVICES_CLIENTE_URL:http://localhost:8080}
+  catalogo:
+    url: ${SERVICES_CATALOGO_URL:http://localhost:8080}
+  pagamento:
+    url: ${SERVICES_PAGAMENTO_URL:http://localhost:8080}
