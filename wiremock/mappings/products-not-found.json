@@ -1,0 +1,10 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/products/(inexistente|not-found).*"
+  },
+  "response": {
+    "status": 404
+  }
+}

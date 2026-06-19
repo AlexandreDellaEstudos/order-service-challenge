@@ -1,0 +1,12 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/products/.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "name": "Produto Exemplo", "price": 10.00, "available": true }
+  }
+}

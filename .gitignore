@@ -54,3 +54,6 @@ Thumbs.db
 
 # K6 results
 k6/results/
+
+# Variáveis de ambiente locais (segredos NÃO versionados)
+.env

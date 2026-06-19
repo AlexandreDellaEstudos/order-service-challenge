@@ -1,0 +1,12 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/products/notebook"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "name": "Notebook Gamer", "price": 3500.00, "available": true }
+  }
+}

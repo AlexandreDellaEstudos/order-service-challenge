@@ -10,6 +10,21 @@
 
 ---
 
+## Abordagem de Implementação e Restrições *(mandatory)*
+
+Estas restrições são obrigatórias e prevalecem sobre qualquer convenção padrão:
+
+- **AR-001 — Idioma**: Todo o projeto DEVE ser escrito em **português** — nomes de pacotes/classes/métodos de domínio, comentários, mensagens de erro, documentação e logs. Termos técnicos consagrados (ex.: `Repository`, `Controller`) podem permanecer em inglês quando forem padrão do framework.
+- **AR-002 — Escopo único (apenas Order)**: Implementar **somente o `order-service`**. Pagamento, Cliente (Customer), Catálogo (Catalog) e Notificação **NÃO** são implementados neste projeto — são **serviços externos**.
+- **AR-003 — Serviços externos via WireMock**: Toda integração com serviços externos (Cliente, Catálogo, **Gateway de Pagamento**, callbacks) é **simulada via WireMock**, exclusivamente para fins de teste. Não há código de produção desses serviços neste repositório, nem stub beans no código de produção.
+- **AR-004 — Mapeamento entre camadas**: A conversão entre camadas (entidade de persistência ↔ modelo de domínio ↔ DTO) é feita por **mapeamento manual e explícito** no adapter correspondente. MapStruct foi descartado para o domínio porque o agregado é imutável, com accessors fluentes e construtor privado (via fábricas `criar`/`reconstituir`), o que exigiria configuração extra e iria contra a simplicidade desejada.
+- **AR-005 — Anti-Corruption Layer (ACL)**: Toda comunicação com serviços externos DEVE passar por uma **camada anticorrupção (ACL)** que traduz os contratos externos para o modelo de domínio, isolando o domínio de mudanças e formatos externos.
+- **AR-006 — Construção incremental e simples**: A solução DEVE ser mantida **simples**, sem complexidade desnecessária, e construída **por partes**. A ordem é: **(1) camada de domínio (`domain/`) primeiro → validação do autor → (2) demais camadas**. Cada etapa só avança após validação explícita. Um código de exemplo será fornecido como referência a ser seguida.
+
+> Observação sobre pagamento: o `order-service` continua responsável por **rastrear os estados do pedido** ligados ao pagamento (`PAYMENT_PENDING`, `PAYMENT_APPROVED`) e por **receber o callback** do gateway, mas o **processamento do pagamento em si é externo** (simulado por WireMock). Não existe agregado/serviço de `Payment` interno neste projeto.
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Criar e Gerenciar um Pedido (Priority: P1)
@@ -134,9 +149,11 @@ Um cliente ou operador consulta os detalhes de um pedido específico ou lista os
 - **FR-014**: O sistema DEVE rejeitar cancelamento de pedidos em estado `PAYMENT_APPROVED`.
 - **FR-015**: O sistema DEVE rejeitar qualquer modificação em pedidos `CANCELLED`.
 
-#### Gestão de Pagamentos
+#### Integração com Pagamento (gateway externo)
 
-- **FR-016**: O sistema DEVE permitir iniciar pagamento somente para pedidos `CONFIRMED`.
+> O pagamento é processado por um **gateway externo** (simulado via WireMock). Os requisitos abaixo descrevem como o **pedido reage** a esse gateway — não há serviço de pagamento interno neste projeto.
+
+- **FR-016**: O sistema DEVE permitir iniciar o pagamento (acionando o gateway externo) somente para pedidos `CONFIRMED`.
 - **FR-017**: O sistema DEVE impedir que um pagamento seja iniciado novamente para o mesmo pedido (idempotência).
 - **FR-018**: O sistema DEVE transitar o pedido para `PAYMENT_APPROVED` ao receber callback de aprovação.
 - **FR-019**: O sistema DEVE retornar o pedido ao estado `CONFIRMED` ao receber callback de rejeição com menos de 3 tentativas acumuladas.
@@ -165,9 +182,9 @@ Um cliente ou operador consulta os detalhes de um pedido específico ou lista os
 
 - **Pedido (Order)**: Representa a intenção de compra de um cliente. Possui estado, lista de itens, valor total calculado e contagem de tentativas de pagamento. É o agregado central do domínio.
 - **Item de Pedido (OrderItem)**: Representa um produto dentro de um pedido, com quantidade e preço unitário registrado no momento da confirmação. Pertence a um único pedido.
-- **Pagamento (Payment)**: Representa a operação de cobrança associada a um pedido confirmado. Registra o estado da cobrança e o resultado do callback do gateway.
-- **Cliente (Customer)**: Entidade externa ao domínio, consultada via serviço externo para validação. Identificado por um ID único.
-- **Produto (Product)**: Entidade externa ao domínio, consultada via serviço de catálogo para validação de disponibilidade e obtenção de preço. Identificado por um ID único.
+- **Cliente (Customer)**: Entidade **externa** ao domínio, consultada via serviço externo (simulado por WireMock) para validação. Identificado por um ID único.
+- **Produto (Product)**: Entidade **externa** ao domínio, consultada via serviço de catálogo (simulado por WireMock) para validação de disponibilidade e obtenção de preço. Identificado por um ID único.
+- **Gateway de Pagamento**: Serviço **externo** (simulado por WireMock). O `order-service` apenas o aciona e recebe o callback de aprovação/rejeição — **não há agregado `Payment` interno**. O pedido guarda apenas a contagem de tentativas e os estados de pagamento.
 
 ---
 
